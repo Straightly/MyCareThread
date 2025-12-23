@@ -1,0 +1,18 @@
+name = "mycarethread-backend"
+main = "index.js"
+compatibility_date = "2025-12-08"
+
+[vars]
+# Add non-secret configuration here as needed.
+
+# TODO (Step 1.2): After creating a KV namespace named `MYCARETHREAD_KV`
+# in the Cloudflare dashboard or via `wrangler kv:namespace create`,
+# add a binding like this using the real `id` value provided by Cloudflare:
+#
+# [[kv_namespaces]]
+# binding = "MYCARETHREAD_KV"
+# id = "<your-kv-namespace-id>"
+
+[[kv_namespaces]]
+binding = "MYCARETHREAD_KV"
+id = "ecbfc240abb04036bc031f7a7354c6cd"
