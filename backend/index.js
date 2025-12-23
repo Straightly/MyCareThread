@@ -463,6 +463,29 @@ export default {
       }
     }
 
+    // Debug endpoint to list keys and count documents (lightweight)
+    if (request.method === "GET" && url.pathname === "/debug/keys") {
+      try {
+        const limit = parseInt(url.searchParams.get("limit") || "1000", 10);
+        const prefix = url.searchParams.get("prefix") || "cda:DOC";
+        
+        const list = await env.MYCARETHREAD_KV.list({ prefix, limit });
+        
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            count: list.keys.length,
+            prefix: prefix,
+            list_complete: list.list_complete,
+            keys: list.keys.map(k => k.name)
+          }),
+          { status: 200, headers: { "content-type": "application/json; charset=UTF-8" } }
+        );
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+      }
+    }
+
     // Default root handler: simple alive check
     const body = {
       service: "MyCareThread backend",
