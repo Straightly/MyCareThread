@@ -1,0 +1,16 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "YObz1GPouH1UxySv5Rs7pECqxeIWiClm6K+hfaU7LLahDTnZBQ/uAhYgJWREJuKuY20EYpVAw2Qkv3Wlz/My/A==",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "fast-xml-parser": "^5.3.3"
+  }
+}
