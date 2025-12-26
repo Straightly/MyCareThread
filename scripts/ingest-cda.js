@@ -4,7 +4,7 @@ const https = require('https');
 
 // Configuration
 const BASE_URL = 'https://mycarethread-backend.zhian-job.workers.dev';
-const SOURCE_DIR = path.join(__dirname, '../MyRecord20251209/IHE_XDM/Zhi1');
+const SOURCE_DIR = path.join(__dirname, '../../MyRecord20251209/IHE_XDM/Zhi1');
 
 async function postData(endpoint, body, queryParams = {}) {
   const url = new URL(endpoint, BASE_URL);
