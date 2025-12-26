@@ -592,8 +592,6 @@ function extractVitalSign(entry, refMap, sourceDocId, sourceSection, sectionNarr
     sourceSection
   };
   
-  if (sectionNarrative) concept.narrativeText = sectionNarrative;
-  
   return concept;
 }
 
@@ -688,8 +686,6 @@ function extractLabResult(entry, refMap, sourceDocId, sourceSection, sectionNarr
     sourceDocId,
     sourceSection
   };
-  
-  if (sectionNarrative) concept.narrativeText = sectionNarrative;
   
   return concept;
 }
@@ -805,6 +801,28 @@ function extractEncounter(entry, refMap, sourceDocId, sourceSection, sectionNarr
 }
 
 /**
+ * Extract Section concept (section-level metadata and narrative)
+ */
+function extractSection(sectionName, section, sourceDocId, entryCount) {
+  const conceptId = `section_${sourceDocId.replace('cda:', '')}_${sectionName}`;
+  
+  const title = section.title || sectionName;
+  const narrativeText = extractNarrativeText(section.text);
+  
+  const concept = {
+    conceptType: "Section",
+    conceptId,
+    sectionName,
+    title,
+    narrativeText,
+    entryCount,
+    sourceDocId
+  };
+  
+  return concept;
+}
+
+/**
  * Extract all concepts from a clinical JSON document
  */
 export function extractConcepts(clinicalJson) {
@@ -827,6 +845,12 @@ export function extractConcepts(clinicalJson) {
     if (!section.entry) continue;
     
     const entries = Array.isArray(section.entry) ? section.entry : [section.entry];
+    
+    // Create Section concept to capture section-level metadata and narrative
+    const sectionConcept = extractSection(sectionName, section, sourceDocId, entries.length);
+    if (sectionConcept) {
+      concepts.push(sectionConcept);
+    }
     
     for (const entry of entries) {
       let concept = null;

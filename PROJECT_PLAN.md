@@ -394,6 +394,68 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
   }
   ```
 
+- [x] **Step 3.8.3 — Add Section-Level Concepts for Narrative Context (1.5 hours)** ✅ **COMPLETE**
+
+  **Goal:** Preserve section-level narrative text by creating separate Section concepts, rather than duplicating narrative across organizer-based concepts.
+
+  **Problem:**
+  - VitalSignSet and LabPanel concepts removed `narrativeText` to avoid duplication
+  - But section-level narrative IS valuable - it provides clinical context for the entire section
+  - CDA structure: Section → title + text (narrative) + entry[] (organizers)
+  - Section.text describes ALL organizers in that section, not individual ones
+
+  **Solution:**
+  - Create a new **Section** concept type that captures section-level metadata and narrative
+  - One Section concept per CDA section (VitalSigns, Results, Problems, etc.)
+  - Contains: sectionName, title, narrativeText, documentId
+  - Organizer-based concepts (VitalSignSet, LabPanel) remain clean and focused on structured data
+  - Section concepts provide the "big picture" narrative context
+
+  **Implementation:**
+  - ✅ Added Section concept type to FIELD_SCHEMA.md (renumbered all subsequent concepts)
+  - ✅ Implemented `extractSection` function in conceptExtractor.js
+  - ✅ Updated `extractConcepts` to create Section concepts before processing entries
+  - ✅ Deployed backend version: `2ea55ccd-81bc-460c-985f-d12467b214cc`
+  - ✅ Re-extracted all 34 documents
+  - ✅ Verified Section concepts contain narrative and organizer concepts remain clean
+
+  **Results:**
+  - **DOC0001:** 102 concepts (9 Section + 93 entry concepts)
+  - **Total across 34 docs:** ~850 concepts (added ~270 Section concepts)
+  - Section narrative successfully preserved without duplication
+  - Perfect separation: Section = context, VitalSignSet/LabPanel = structured data
+  - Accurately reflects CDA hierarchical structure: Document → Section → Entry
+
+  **Example Section Concept (VitalSigns):**
+  ```json
+  {
+    "conceptType": "Section",
+    "conceptId": "section_DOC0001_VitalSigns",
+    "sectionName": "VitalSigns",
+    "title": "Last Filed Vital Signs",
+    "narrativeText": "Vital Sign Reading Time Taken Comments Blood Pressure / 120 74 11/03/2025 9:05 AM PST Pulse 11/03/2025 9:05 AM PST Temperature 36.6 °C (97.9 °F)...",
+    "entryCount": 3,
+    "sourceDocId": "cda:DOC0001"
+  }
+  ```
+
+  **Example VitalSignSet (Clean, No Narrative):**
+  ```json
+  {
+    "conceptType": "VitalSignSet",
+    "conceptId": "vital_5833098300-Z8273403",
+    "measuredDate": "20251103170500+0000",
+    "readings": [
+      {"vitalType": "Systolic blood pressure", "value": "120", "unit": "mm[Hg]", "loinc": "8480-6"},
+      {"vitalType": "Diastolic blood pressure", "value": "74", "unit": "mm[Hg]", "loinc": "8462-4"}
+    ],
+    "sourceDocId": "cda:DOC0001",
+    "sourceSection": "VitalSigns"
+  }
+  ```
+
+  **Impact:** This properly models CDA's three-tier hierarchy and solves the narrative duplication problem while preserving valuable clinical context.
+
 - [ ] **Step 3.9 — Epic Document Export Investigation (User Task)**
   
   **CHECKLIST: What to Look For in Epic MyChart**
