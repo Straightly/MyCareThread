@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { extractConcepts } from "./lib/conceptExtractor.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -555,6 +556,70 @@ export default {
         });
       } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+      }
+    }
+
+    // Get extracted concepts for a document
+    if (request.method === "GET" && url.pathname.startsWith("/concepts/")) {
+      try {
+        const docId = url.pathname.replace("/concepts/", "");
+        if (!docId || docId.includes("/") || docId.includes("\\")) {
+          return new Response(JSON.stringify({ error: "Invalid docId" }), { status: 400 });
+        }
+        
+        const conceptsData = await env.MYCARETHREAD_KV.get(`concepts:${docId}`);
+        if (!conceptsData) {
+          return new Response(JSON.stringify({ error: "Concepts not found" }), { status: 404 });
+        }
+        
+        return new Response(conceptsData, {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+      }
+    }
+
+    // Extract concepts from clinical JSON and save to KV
+    if (request.method === "POST" && url.pathname === "/extract-concepts") {
+      try {
+        const docId = url.searchParams.get("docId");
+        if (!docId) {
+          return new Response(JSON.stringify({ error: "Missing docId parameter" }), { status: 400 });
+        }
+        
+        const clinicalJsonText = await request.text();
+        if (!clinicalJsonText) {
+          return new Response(JSON.stringify({ error: "Empty request body" }), { status: 400 });
+        }
+        
+        const clinicalJson = JSON.parse(clinicalJsonText);
+        
+        // Extract concepts
+        const concepts = extractConcepts(clinicalJson);
+        
+        // Save to KV
+        await env.MYCARETHREAD_KV.put(`concepts:${docId}`, JSON.stringify(concepts));
+        
+        // Get concept type summary
+        const conceptTypes = {};
+        for (const concept of concepts) {
+          conceptTypes[concept.conceptType] = (conceptTypes[concept.conceptType] || 0) + 1;
+        }
+        
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            docId,
+            conceptCount: concepts.length,
+            conceptTypes: Object.entries(conceptTypes).map(([type, count]) => `${type}(${count})`),
+            concepts: concepts
+          }),
+          { status: 200, headers: { "content-type": "application/json; charset=UTF-8" } }
+        );
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err), stack: err.stack }), { status: 500 });
       }
     }
 
