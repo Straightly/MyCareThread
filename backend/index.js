@@ -74,10 +74,83 @@ export default {
         if (!content) {
           return new Response("Body empty", { status: 400 });
         }
+        
         // Store the raw CDA XML
         await env.MYCARETHREAD_KV.put(`cda:${docId}`, content);
+
+        // Parse and extract clinical JSON
+        const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
+        const INTERESTING_SECTIONS = {
+          "48765-2": "Allergies",
+          "10160-0": "Medications",
+          "66149-6": "Prescriptions",
+          "10183-2": "DischargeMeds",
+          "11450-4": "ActiveProblems",
+          "11348-0": "ResolvedProblems",
+          "11369-6": "Immunizations",
+          "8716-3":  "VitalSigns",
+          "30954-2": "Results",
+          "47519-4": "Procedures",
+          "46240-8": "Encounters",
+          "18776-5": "PlanOfTreatment",
+          "51848-0": "VisitDiagnoses",
+          "85847-2": "CareTeams",
+          "29299-5": "ReasonForVisit",
+          "10164-2": "ProgressNotes"
+        };
+
+        let clinicalJson = null;
+        try {
+          const json = parser.parse(content);
+          const cda = json.ClinicalDocument;
+          if (cda) {
+            const docSummary = {
+              id: `cda:${docId}`,
+              title: cda.title,
+              effectiveTime: cda.effectiveTime?.["@_value"],
+              sections: {}
+            };
+
+            const structuredBody = cda.component?.structuredBody;
+            if (structuredBody?.component) {
+              const components = Array.isArray(structuredBody.component) 
+                ? structuredBody.component 
+                : [structuredBody.component];
+
+              for (const comp of components) {
+                if (comp.section && comp.section.code) {
+                  const code = comp.section.code["@_code"];
+                  const category = INTERESTING_SECTIONS[code];
+                  if (category) {
+                    docSummary.sections[category] = {
+                      title: comp.section.title,
+                      text: comp.section.text, 
+                      entry: comp.section.entry
+                    };
+                  }
+                }
+              }
+            }
+            clinicalJson = docSummary;
+          }
+        } catch (parseErr) {
+          console.error(`Failed to parse ${docId} for clinical extraction:`, parseErr);
+        }
+
+        // Store clinical JSON if extraction succeeded
+        if (clinicalJson) {
+          await env.MYCARETHREAD_KV.put(`json:${docId}`, JSON.stringify(clinicalJson));
+        }
+
         return new Response(
-          JSON.stringify({ status: "ok", action: "import_cda", docId, size: content.length }),
+          JSON.stringify({ 
+            status: "ok", 
+            action: "import_cda", 
+            docId, 
+            size: content.length,
+            clinicalExtracted: !!clinicalJson,
+            sectionCount: clinicalJson ? Object.keys(clinicalJson.sections).length : 0
+          }),
           { status: 200, headers: { "content-type": "application/json; charset=UTF-8" } }
         );
       } catch (err) {
@@ -455,6 +528,28 @@ export default {
           return new Response(JSON.stringify({ error: "No full summary found" }), { status: 404 });
         }
         return new Response(summary, {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+      }
+    }
+
+    // Get individual clinical JSON document
+    if (request.method === "GET" && url.pathname.startsWith("/json/")) {
+      try {
+        const docId = url.pathname.replace("/json/", "");
+        if (!docId || docId.includes("/") || docId.includes("\\")) {
+          return new Response(JSON.stringify({ error: "Invalid docId" }), { status: 400 });
+        }
+        
+        const jsonData = await env.MYCARETHREAD_KV.get(`json:${docId}`);
+        if (!jsonData) {
+          return new Response(JSON.stringify({ error: "Document not found" }), { status: 404 });
+        }
+        
+        return new Response(jsonData, {
           status: 200,
           headers: { "content-type": "application/json; charset=UTF-8" }
         });

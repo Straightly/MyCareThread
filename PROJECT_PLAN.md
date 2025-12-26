@@ -135,18 +135,63 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 ---
 
-### Phase 3 — Data Normalization & Vibe-Friendly Schema
+### Phase 3 — Clinical Event Model & Thread-Based Views
 
 **Goals:**
-- Normalize medication-related FHIR resources into a **clean internal schema** optimized for querying and vibe programming.
+- Transform CDA documents into clinical-only JSON (per document)
+- Build event-based model for thread queries
+- Enable temporal analysis and relationship detection
 
 **Tasks:**
-- [ ] Decide on an internal medication model (e.g., fields like drug name, dose, route, frequency, start/stop dates, ordering provider, source system).
-- [ ] Implement transformation from raw FHIR resources (e.g., `MedicationRequest`, `MedicationStatement`, `Medication`) into this schema.
-- [ ] Store normalized data in your chosen store (KV/D1/DB/files) alongside raw FHIR for traceability.
-- [ ] Add an endpoint such as `GET /medications/normalized` that returns only the normalized form.
 
-**Estimate:** 4–6 hours.
+- [X] **Step 3.1 — Per-Document Clinical JSON Extraction (1-2 hours)**
+  - [X] Modify `POST /import/cda` endpoint to:
+    - Parse incoming CDA XML immediately
+    - Extract clinical sections (same logic as `/build/clinical-json`)
+    - Save raw CDA as `cda:DOC####`
+    - Save clinical JSON as `json:DOC####`
+  - [X] Re-ingest all 34 documents to populate `json:*` keys
+  - [X] Verify extraction with `GET /debug/keys?prefix=json:DOC`
+  - **Result:** All 34 documents successfully processed with 8-14 clinical sections each
+
+- [X] **Step 3.2 — Define Clinical Concept Types (30 min)**
+  - [X] Define core concept types to extract:
+    - Problem (diagnoses, conditions, symptoms)
+    - Medication (prescriptions, administrations)
+    - Allergy (allergens, reactions)
+    - Procedure (surgeries, interventions)
+    - VitalSign (BP, temp, weight, etc.)
+    - LabResult (test results)
+    - Immunization (vaccines)
+    - Encounter (visits, admissions)
+  - [X] Document in `docs/CONCEPT_TYPES.md`
+  - **Result:** Created comprehensive concept type definitions with CDA section mappings and design principles
+
+- [X] **Step 3.3 — Define Field Schema per Concept (1 hour)**
+  - [X] For each concept type, define essential fields:
+    - **Common fields:** name, date, status, sourceDocId, sourceSection
+    - **Concept-specific fields:** 
+      - Problem: onsetDate, codes (SNOMED, ICD-10), severity
+      - Medication: drugName, dose, route, frequency, startDate, endDate, codes (RxNorm)
+      - Allergy: allergen, reaction, severity, codes
+      - Procedure: procedureName, performedDate, codes (CPT, SNOMED)
+      - VitalSign: type, value, unit, measuredDate
+      - LabResult: testName, value, unit, referenceRange, resultDate, codes (LOINC)
+  - [X] Exclude: HTML formatting (tr/td), internal references (#problem18name), redundant code translations
+  - [X] Document schema in `docs/FIELD_SCHEMA.md`
+  - **Result:** Created comprehensive field schema with examples, extraction rules, and validation rules for all 8 concept types
+
+- [ ] **Step 3.4 — Extract Clean Clinical Concepts (2-3 hours)**
+  - Create extraction logic for each concept type
+  - Parse entries from clinical JSON (json:DOC####)
+  - Extract only defined fields per concept
+  - Resolve internal references to plain text
+  - Keep only primary code per system (SNOMED for problems, RxNorm for meds, etc.)
+  - Save as `concepts:DOC####` in KV (array of concept objects)
+  - Add endpoint `GET /concepts/:docId` to retrieve
+  - Verify extraction quality with sample documents
+
+**Estimate:** 4–5 hours (Steps 3.2-3.4).
 
 ---
 
