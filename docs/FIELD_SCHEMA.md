@@ -25,6 +25,7 @@ Every concept includes these base fields:
 | `name` | string | Yes | Human-readable name/description |
 | `date` | string | Yes | Primary date (ISO 8601 format YYYYMMDD) |
 | `status` | string | No | Current status (Active, Resolved, Completed, etc.) |
+| `narrativeText` | string | No | Narrative text from section (clinical context, descriptions) |
 | `sourceDocId` | string | Yes | Source document ID (e.g., "cda:DOC0001") |
 | `sourceSection` | string | Yes | Source CDA section (e.g., "ActiveProblems") |
 
@@ -42,6 +43,7 @@ Every concept includes these base fields:
 | `onsetDate` | string | Yes | When problem started/noted (YYYYMMDD) | "20251017" |
 | `status` | string | Yes | Active or Resolved | "Active" |
 | `severity` | string | No | Severity level if documented | "Moderate" |
+| `clinicalNotes` | string | No | Clinical narrative from ProgressNotes or related sections | "Cough intermittently for over a year..." |
 | `codes` | object | Yes | Medical codes | See below |
 | `codes.snomed` | string | No | SNOMED CT code | "68154008" |
 | `codes.icd10` | string | No | ICD-10-CM code | "R05.3" |
@@ -177,33 +179,39 @@ Every concept includes these base fields:
 
 ---
 
-## 5. VitalSign
+## 5. VitalSignSet
 
-**Purpose:** Physiological measurements
+**Purpose:** Group of vital signs measurements taken together (blood pressure, temperature, etc.)
+
+**Note:** CDA organizes vital signs as organizers containing multiple observations. This structure preserves that clinical grouping.
 
 ### Fields
 
 | Field | Type | Required | Description | Example |
 |-------|------|----------|-------------|---------|
-| `vitalType` | string | Yes | Type of vital sign | "Blood Pressure" |
-| `value` | string | Yes | Measured value | "120/80" |
-| `unit` | string | Yes | Unit of measurement | "mmHg" |
-| `measuredDate` | string | Yes | When measured (YYYYMMDD or full timestamp) | "20251209165402" |
-| `codes` | object | No | Medical codes | See below |
-| `codes.loinc` | string | No | LOINC code | "85354-9" |
+| `measuredDate` | string | Yes | When measurements taken (YYYYMMDD) | "20251209165402" |
+| `readings` | array | Yes | Array of individual vital sign readings | See below |
+| `readings[].vitalType` | string | Yes | Type of vital sign | "Systolic blood pressure" |
+| `readings[].value` | string | Yes | Measurement value | "120" |
+| `readings[].unit` | string | Yes | Unit of measurement | "mm[Hg]" |
+| `readings[].loinc` | string | No | LOINC code for this reading | "8480-6" |
+| `narrativeText` | string | No | Clinical context from section | "Vital signs taken during office visit..." |
 
 ### Example
 ```json
 {
-  "conceptType": "VitalSign",
-  "conceptId": "vital_555123",
-  "vitalType": "Blood Pressure",
-  "value": "120/80",
-  "unit": "mmHg",
-  "measuredDate": "20251209165402",
-  "codes": {
-    "loinc": "85354-9"
-  },
+  "conceptType": "VitalSignSet",
+  "conceptId": "vital_5833098300",
+  "measuredDate": "20251103170500+0000",
+  "readings": [
+    {"vitalType": "Systolic blood pressure", "value": "120", "unit": "mm[Hg]", "loinc": "8480-6"},
+    {"vitalType": "Diastolic blood pressure", "value": "74", "unit": "mm[Hg]", "loinc": "8462-4"},
+    {"vitalType": "Heart rate", "value": "63", "unit": "/min", "loinc": "8867-4"},
+    {"vitalType": "Body temperature", "value": "36.61", "unit": "Cel", "loinc": "8310-5"},
+    {"vitalType": "Body weight", "value": "71.668", "unit": "kg", "loinc": "29463-7"},
+    {"vitalType": "Oxygen saturation", "value": "98", "unit": "%", "loinc": "59408-5"}
+  ],
+  "narrativeText": "Vital signs taken during office visit...",
   "sourceDocId": "cda:DOC0001",
   "sourceSection": "VitalSigns"
 }
@@ -211,39 +219,44 @@ Every concept includes these base fields:
 
 ---
 
-## 6. LabResult
+## 6. LabPanel
 
-**Purpose:** Laboratory test results
+**Purpose:** Group of laboratory test results from a single panel/order (CBC, metabolic panel, etc.)
+
+**Note:** CDA organizes lab results as organizers (panels) containing multiple component observations. This structure preserves that clinical grouping.
 
 ### Fields
 
 | Field | Type | Required | Description | Example |
 |-------|------|----------|-------------|---------|
-| `testName` | string | Yes | Name of lab test | "Hemoglobin A1c" |
-| `value` | string | Yes | Test result value | "6.5" |
-| `unit` | string | Yes | Unit of measurement | "%" |
-| `referenceRange` | string | No | Normal range | "4.0-5.6" |
-| `interpretation` | string | No | Normal, Abnormal, High, Low | "High" |
-| `resultDate` | string | Yes | When result obtained (YYYYMMDD) | "20251201" |
+| `panelName` | string | Yes | Name of lab panel/order | "CBC (Complete Blood Count)" |
+| `orderedDate` | string | No | When ordered (YYYYMMDD) | "20251201" |
+| `resultDate` | string | Yes | When results finalized (YYYYMMDD) | "20251201" |
 | `status` | string | Yes | Final, Preliminary, Corrected | "Final" |
-| `codes` | object | No | Medical codes | See below |
-| `codes.loinc` | string | No | LOINC code | "4548-4" |
+| `results` | array | Yes | Array of individual test results | See below |
+| `results[].testName` | string | Yes | Name of test | "Hemoglobin" |
+| `results[].value` | string | Yes | Test result value | "12.8" |
+| `results[].unit` | string | No | Unit of measurement | "g/dL" |
+| `results[].referenceRange` | string | No | Normal range | "13.0-17.7" |
+| `results[].interpretation` | string | No | Normal, High, Low, etc. | "Low" |
+| `results[].loinc` | string | No | LOINC code for this test | "718-7" |
+| `narrativeText` | string | No | Clinical context from section | "Lab results from annual physical..." |
 
 ### Example
 ```json
 {
-  "conceptType": "LabResult",
-  "conceptId": "lab_789012",
-  "testName": "Hemoglobin A1c",
-  "value": "6.5",
-  "unit": "%",
-  "referenceRange": "4.0-5.6",
-  "interpretation": "High",
-  "resultDate": "20251201",
+  "conceptType": "LabPanel",
+  "conceptId": "lab_1416417350",
+  "panelName": "CBC (Complete Blood Count)",
+  "resultDate": "20250922",
   "status": "Final",
-  "codes": {
-    "loinc": "4548-4"
-  },
+  "results": [
+    {"testName": "WBC", "value": "4.2", "unit": "x10E3/uL", "referenceRange": "3.4-10.8", "interpretation": null, "loinc": "6690-2"},
+    {"testName": "RBC", "value": "4.18", "unit": "x10E6/uL", "referenceRange": "4.14-5.80", "interpretation": "Low", "loinc": "789-8"},
+    {"testName": "Hemoglobin", "value": "12.8", "unit": "g/dL", "referenceRange": "13.0-17.7", "interpretation": "Low", "loinc": "718-7"},
+    {"testName": "Hematocrit", "value": "40.4", "unit": "%", "referenceRange": "37.5-51.0", "interpretation": null, "loinc": "4544-3"}
+  ],
+  "narrativeText": "Lab results from annual physical...",
   "sourceDocId": "cda:DOC0001",
   "sourceSection": "Results"
 }
