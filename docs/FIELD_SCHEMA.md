@@ -31,7 +31,38 @@ Every concept includes these base fields:
 
 ---
 
-## 1. Problem
+## 1. Section
+
+**Purpose:** Section-level metadata and narrative context from CDA document sections
+
+**Note:** CDA documents are organized into sections (e.g., VitalSigns, Results, Problems). Each section has a title and narrative text that describes ALL entries in that section. Section concepts capture this high-level context separately from the individual entry-based concepts (VitalSignSet, LabPanel, etc.).
+
+### Fields
+
+| Field | Type | Required | Description | Example |
+|-------|------|----------|-------------|---------|
+| `sectionName` | string | Yes | CDA section name | "VitalSigns" |
+| `title` | string | Yes | Section title from CDA | "Last Filed Vital Signs" |
+| `narrativeText` | string | Yes | Section narrative (HTML table or text) | "Vital Sign Reading Time Taken..." |
+| `entryCount` | number | Yes | Number of entries in this section | 3 |
+| `sourceDocId` | string | Yes | Source document ID | "cda:DOC0001" |
+
+### Example
+```json
+{
+  "conceptType": "Section",
+  "conceptId": "section_DOC0001_VitalSigns",
+  "sectionName": "VitalSigns",
+  "title": "Last Filed Vital Signs",
+  "narrativeText": "Vital Sign Reading Time Taken Comments Blood Pressure / 120 74 11/03/2025 9:05 AM PST Pulse 63 11/03/2025 9:05 AM PST Temperature 36.6 °C (97.9 °F) 11/03/2025 9:05 AM PST...",
+  "entryCount": 3,
+  "sourceDocId": "cda:DOC0001"
+}
+```
+
+---
+
+## 2. Problem
 
 **Purpose:** Diagnoses, conditions, symptoms, clinical findings
 
@@ -107,7 +138,7 @@ Every concept includes these base fields:
 
 ---
 
-## 3. Allergy
+## 4. Allergy
 
 **Purpose:** Documented allergies and adverse reactions
 
@@ -144,7 +175,7 @@ Every concept includes these base fields:
 
 ---
 
-## 4. Procedure
+## 5. Procedure
 
 **Purpose:** Medical procedures, surgeries, interventions
 
@@ -179,7 +210,7 @@ Every concept includes these base fields:
 
 ---
 
-## 5. VitalSignSet
+## 6. VitalSignSet
 
 **Purpose:** Group of vital signs measurements taken together (blood pressure, temperature, etc.)
 
@@ -195,7 +226,6 @@ Every concept includes these base fields:
 | `readings[].value` | string | Yes | Measurement value | "120" |
 | `readings[].unit` | string | Yes | Unit of measurement | "mm[Hg]" |
 | `readings[].loinc` | string | No | LOINC code for this reading | "8480-6" |
-| `narrativeText` | string | No | Clinical context from section | "Vital signs taken during office visit..." |
 
 ### Example
 ```json
@@ -211,7 +241,6 @@ Every concept includes these base fields:
     {"vitalType": "Body weight", "value": "71.668", "unit": "kg", "loinc": "29463-7"},
     {"vitalType": "Oxygen saturation", "value": "98", "unit": "%", "loinc": "59408-5"}
   ],
-  "narrativeText": "Vital signs taken during office visit...",
   "sourceDocId": "cda:DOC0001",
   "sourceSection": "VitalSigns"
 }
@@ -219,7 +248,7 @@ Every concept includes these base fields:
 
 ---
 
-## 6. LabPanel
+## 7. LabPanel
 
 **Purpose:** Group of laboratory test results from a single panel/order (CBC, metabolic panel, etc.)
 
@@ -240,7 +269,6 @@ Every concept includes these base fields:
 | `results[].referenceRange` | string | No | Normal range | "13.0-17.7" |
 | `results[].interpretation` | string | No | Normal, High, Low, etc. | "Low" |
 | `results[].loinc` | string | No | LOINC code for this test | "718-7" |
-| `narrativeText` | string | No | Clinical context from section | "Lab results from annual physical..." |
 
 ### Example
 ```json
@@ -256,7 +284,6 @@ Every concept includes these base fields:
     {"testName": "Hemoglobin", "value": "12.8", "unit": "g/dL", "referenceRange": "13.0-17.7", "interpretation": "Low", "loinc": "718-7"},
     {"testName": "Hematocrit", "value": "40.4", "unit": "%", "referenceRange": "37.5-51.0", "interpretation": null, "loinc": "4544-3"}
   ],
-  "narrativeText": "Lab results from annual physical...",
   "sourceDocId": "cda:DOC0001",
   "sourceSection": "Results"
 }
@@ -264,7 +291,7 @@ Every concept includes these base fields:
 
 ---
 
-## 7. Immunization
+## 8. Immunization
 
 **Purpose:** Vaccines administered
 
@@ -299,7 +326,7 @@ Every concept includes these base fields:
 
 ---
 
-## 8. Encounter
+## 9. Encounter
 
 **Purpose:** Clinical visits and healthcare interactions
 
