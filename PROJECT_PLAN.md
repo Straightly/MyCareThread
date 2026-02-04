@@ -456,7 +456,192 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
   **Impact:** This properly models CDA's three-tier hierarchy and solves the narrative duplication problem while preserving valuable clinical context.
 
-- [ ] **Step 3.9 — Epic Document Export Investigation (User Task)**
+- [ ] **Step 3.9 — Set Up Self-Hosted Email Server**
+
+**Goal:** Create a business email (developer@nothingbuttrust.com) for Aetna developer portal registration.
+
+**Platform:** Oracle Linux instance with Postfix/Dovecot.
+
+**Checklist:**
+
+- [ ] Update system: sudo dnf update
+- [ ] Install Postfix and Dovecot: sudo dnf install postfix dovecot
+- [ ] Configure Postfix (/etc/postfix/main.cf):
+    ```
+    myhostname = mail.nothingbuttrust.com
+    mydomain = nothingbuttrust.com
+    myorigin = $mydomain
+    inet_interfaces = all
+    mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+    ```
+    Then run: sudo systemctl restart postfix
+- [ ] Configure Dovecot (/etc/dovecot/dovecot.conf):
+    ```
+    protocols = imap pop3
+    mail_location = maildir:~/Maildir
+    ```
+    Then run: sudo systemctl restart dovecot
+- [X] Verify services:
+    - Services running: sudo systemctl status postfix; sudo systemctl status dovecot
+    - Ports listening: sudo ss -tlnp | grep ':25\|:143'
+    - Logs: sudo journalctl -u postfix -n 10; sudo journalctl -u dovecot -n 10
+    - Basic connectivity: telnet localhost 25; telnet localhost 143 or use nc -zv localhost 25
+    - Configs loaded: postconf -n | grep myhostname; dovecot -n | grep protocols
+- [X] Open firewall ports: sudo firewall-cmd --permanent --add-port=25/tcp --add-port=143/tcp --add-port=587/tcp; sudo firewall-cmd --reload
+- [X] OCI security list ingress rules: Add inbound rules for ports 25, 143, 587 (TCP) from 0.0.0.0/0
+- [ ] DNS setup on GoDaddy:
+    - [X] MX record: Name @ (root domain), Priority 10, Value mail.nothingbuttrust.com
+    - [X] A record: Name mail.nothingbuttrust.com, Value Oracle server IP
+    - [X] SPF: TXT "@" "v=spf1 mx ~all"
+    - [ ] DKIM: Install and configure opendkim for email signing
+        1. Install opendkim: sudo dnf install opendkim
+        2. Create keys directory: sudo mkdir -p /etc/opendkim/keys
+        3. Generate key pair for nothingbuttrust.com:
+           sudo opendkim-genkey -s default -d nothingbuttrust.com -D /etc/opendkim/keys
+           (This creates /etc/opendkim/keys/default.private and default.txt)
+        4. Set permissions:
+           sudo chown -R opendkim:opendkim /etc/opendkim/keys
+           sudo chmod 600 /etc/opendkim/keys/default.private
+        5. Configure /etc/opendkim.conf (replace entire file with):
+           ```
+           AutoRestart             Yes
+           AutoRestartRate         10/1h
+           UMask                   002
+           Syslog                  yes
+           SyslogSuccess           Yes
+           LogWhy                  Yes
+           
+           Canonicalization        relaxed/simple
+           ExternalIgnoreList      /etc/opendkim/TrustedHosts
+           InternalHosts           /etc/opendkim/TrustedHosts
+           KeyTable                /etc/opendkim/KeyTable
+           SigningTable            refile:/etc/opendkim/SigningTable
+           
+           Mode                    sv
+           PidFile                 /var/run/opendkim/opendkim.pid
+           Socket                  inet:8891@localhost
+           
+           UserID                  opendkim:opendkim
+           
+           Domain                  nothingbuttrust.com
+           KeyFile                 /etc/opendkim/keys/default.private
+           Selector                default
+           ```
+        6. Create /etc/opendkim/KeyTable with content:
+           ```
+           default._domainkey.nothingbuttrust.com nothingbuttrust.com:default:/etc/opendkim/keys/default.private
+           ```
+        7. Create /etc/opendkim/SigningTable with content:
+           ```
+           *@nothingbuttrust.com default._domainkey.nothingbuttrust.com
+           ```
+        8. Create /etc/opendkim/TrustedHosts with content:
+           ```
+           127.0.0.1
+           ::1
+           localhost
+           mail.nothingbuttrust.com
+           nothingbuttrust.com
+           ```
+        9. Configure Postfix to use opendkim by adding to /etc/postfix/main.cf:
+           ```
+           # DKIM
+           smtpd_milters = inet:localhost:8891
+           non_smtpd_milters = inet:localhost:8891
+           milter_default_action = accept
+           milter_protocol = 2
+           ```
+        10. Restart services:
+            sudo systemctl restart opendkim
+            sudo systemctl restart postfix
+        11. Add public key to DNS:
+            - Get public key: sudo cat /etc/opendkim/keys/default.txt
+            - In GoDaddy DNS, add TXT record:
+              Name: default._domainkey
+              Value: "v=DKIM1; k=rsa; p=<paste public key here>"
+              (Remove quotes and line breaks from the key value)
+    - [ ] DMARC: TXT "_dmarc" "v=DMARC1; p=quarantine; rua=mailto:admin@nothingbuttrust.com"
+- [ ] SSL: Install and configure Let's Encrypt certificates for mail.nothingbuttrust.com
+        1. Install certbot: sudo dnf install certbot
+        2. Stop services temporarily (certbot needs port 80):
+           sudo systemctl stop postfix
+           sudo systemctl stop dovecot
+        3. Obtain certificate:
+           sudo certbot certonly --standalone -d mail.nothingbuttrust.com
+           (This creates /etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem and privkey.pem)
+        4. Set permissions for certificates:
+           sudo chmod 644 /etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem
+           sudo chmod 600 /etc/letsencrypt/live/mail.nothingbuttrust.com/privkey.pem
+           sudo chown root:root /etc/letsencrypt/live/mail.nothingbuttrust.com/*
+        5. Configure Postfix for SSL by adding to /etc/postfix/main.cf:
+           ```
+           # SSL Configuration
+           smtpd_tls_cert_file = /etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem
+           smtpd_tls_key_file = /etc/letsencrypt/live/mail.nothingbuttrust.com/privkey.pem
+           smtpd_tls_security_level = encrypt
+           smtpd_tls_received_header = yes
+           smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+           smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+           smtpd_use_tls = yes
+           smtp_use_tls = yes
+           
+           # Enable submission port (587)
+           submission inet n       -       y       -       -       smtpd
+             -o syslog_name=postfix/submission
+             -o smtpd_tls_security_level=encrypt
+             -o smtpd_sasl_auth_enable=yes
+             -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+           ```
+        6. Configure Dovecot for SSL by editing /etc/dovecot/conf.d/10-ssl.conf:
+           ```
+           ssl = required
+           ssl_cert = </etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem
+           ssl_key = </etc/letsencrypt/live/mail.nothingbuttrust.com/privkey.pem
+           ssl_protocols = !SSLv2 !SSLv3
+           ssl_cipher_list = ALL:!ADH:!LOW:!SSLv2:!SSLv3:!EXP:!aNULL:!eNULL:!NULL
+           ```
+        7. Restart services:
+           sudo systemctl restart postfix
+           sudo systemctl restart dovecot
+        8. Test SSL:
+           - SMTP: openssl s_client -connect mail.nothingbuttrust.com:587 -starttls smtp
+           - IMAP: openssl s_client -connect mail.nothingbuttrust.com:993
+- [X] Create user: sudo useradd -m developer; sudo passwd developer
+- [ ] Verify email send/receive functionality:
+    1. Send test email from external account (Gmail, Outlook, etc.) to developer@nothingbuttrust.com
+    2. Check delivery with command line on server:
+       - View mail queue: sudo mailq
+       - Check logs: sudo journalctl -u postfix -f
+       - Check user mailbox: ls -la /home/developer/Maildir/new/
+    3. Read email with command line:
+       - Install mail client: sudo dnf install mailx
+       - Read mail: mail -u developer
+    4. Send test email from server:
+       - echo "Test message" | mail -s "Test Subject" your_external_email@example.com
+    5. Verify email client can connect and send/receive:
+       - Configure Outlook/Thunderbird with settings above
+       - Send test email to external account
+       - Reply to test email delivery both ways
+- [ ] Test: Connect with email client (IMAP 143, SMTP 587 with TLS).
+- [ ] Use developer@nothingbuttrust.com for Aetna registration.
+
+- [ ] **Step 3.10 — Insurer Claim Data Collection**
+
+**Goal:** Programmatically access all healthcare data from Meritain (Aetna).
+
+**Easiest Approach:** Use Aetna's FHIR Patient Access APIs.
+
+**Steps:**
+
+- [ ] Register on Aetna developer portal (https://developerportal.aetna.com/).
+- [ ] Create a patient access app and obtain credentials.
+- [ ] Implement SMART on FHIR OAuth flow for patient authentication.
+- [ ] Query FHIR resources: Claim (for claims), Coverage (insurance), etc.
+- [ ] Handle data ingestion into MyCareThread backend.
+
+**Notes:** APIs available for Medicare Advantage plans; confirm availability for other Meritain plans. Good developer support from Aetna.
+
+- [ ] **Step 3.11 — Epic Document Export Investigation (User Task)**
   
   **CHECKLIST: What to Look For in Epic MyChart**
   
@@ -554,7 +739,85 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 ---
 
-### Phase 4 — Minimal Web Client for Personal Use
+### Phase 4 — Domain Reputation Building (Optional)
+
+**Goal:** Build sending reputation for nothingbuttrust.com to enable reliable outbound email delivery.
+
+**When to do:** After all higher priority tasks are complete or blocked waiting for external dependencies.
+
+**Prerequisites:**
+- [ ] Email server receiving confirmed working (Step 3.9 complete)
+- [ ] SASL authentication configured for port 587
+- [ ] SSL certificate installed (optional but recommended)
+
+**Tasks:**
+
+- [ ] **Step 4.1 — Configure SMTP Authentication**
+  1. Install SASL packages: sudo dnf install cyrus-sasl cyrus-sasl-plain
+  2. Configure Postfix for SASL in /etc/postfix/main.cf:
+     ```
+     smtpd_sasl_auth_enable = yes
+     smtpd_sasl_path = private/auth
+     smtpd_sasl_type = dovecot
+     smtpd_sasl_security_options = noanonymous
+     smtpd_sasl_local_domain = $myhostname
+     broken_sasl_auth_clients = yes
+     ```
+  3. Configure Dovecot SASL in /etc/dovecot/conf.d/10-master.conf:
+     ```
+     service auth {
+       unix_listener /var/spool/postfix/private/auth {
+         mode = 0660
+         user = postfix
+         group = postfix
+       }
+     }
+     ```
+  4. Restart services: sudo systemctl restart postfix dovecot
+
+- [ ] **Step 4.2 — Complete DNS Records**
+  1. Add DMARC record: TXT "_dmarc" "v=DMARC1; p=quarantine; rua=mailto:admin@nothingbuttrust.com"
+  2. Verify SPF record: TXT "@" "v=spf1 mx ~all"
+  3. Consider adding DKIM if package becomes available
+
+- [ ] **Step 4.3 — Warm-up Sending Strategy**
+  1. **Week 1:** Send 5-10 emails/day to personal accounts
+     - Send to Gmail, Outlook, Yahoo accounts you control
+     - Ask recipients to reply to confirm delivery
+     - Monitor for bounces or spam folder placement
+  2. **Week 2:** Increase to 20-30 emails/day
+     - Continue sending to engaged recipients
+     - Vary email content and timing
+     - Check spam complaints
+  3. **Week 3:** Scale to 50+ emails/day
+     - Maintain consistent sending patterns
+     - Monitor deliverability metrics
+
+- [ ] **Step 4.4 — Monitor Reputation**
+  1. Set up Google Postmaster Tools
+  2. Configure Microsoft SNDS (Smart Network Data Services)
+  3. Monitor bounce rates and spam complaints
+  4. Track email placement rates (inbox vs spam)
+
+- [ ] **Step 4.5 — Best Practices**
+  1. Use consistent sending patterns
+  2. Include proper headers and content structure
+  3. Avoid bulk sending initially
+  4. Maintain low complaint rates (<0.1%)
+  5. Process unsubscribe requests promptly
+
+**Success Metrics:**
+- >95% inbox placement rate
+- <0.1% spam complaint rate
+- Consistent delivery to major providers (Gmail, Outlook, Yahoo)
+
+**Estimate:** 2-3 weeks of gradual warm-up + 4-6 hours configuration
+
+**Notes:** This phase is optional - only needed if outbound email becomes required for the project. For Aetna integration, only receiving capability is essential.
+
+---
+
+### Phase 5 — Minimal Web Client for Personal Use
 
 **Goals:**
 - Configure the app to talk to **Epic** (sandbox or production patient portal).
@@ -578,7 +841,7 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 ---
 
-### Phase 5 — Prepare for iPhone App Wrapping
+### Phase 6 — Prepare for iPhone App Wrapping
 
 **Goals:**
 - Make sure the web client is cleanly structured so it can be wrapped as an iPhone app later.
@@ -593,7 +856,7 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 ---
 
-### Phase 6 — Vibe Programming Readiness
+### Phase 7 — Vibe Programming Readiness
 
 **Goals:**
 - Make stored data easy to consume from AI tools.
@@ -612,11 +875,12 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 - Phase 1 — Cloudflare Server for Data Retrieval & Storage: 6–9 hours
 - Phase 2 — SMART on FHIR Flow & Epic Connection: 4–7 hours
 - Phase 3 — Data Normalization & Vibe-Friendly Schema: 4–6 hours
-- Phase 4 — Minimal Web UI: 3–5 hours
-- Phase 5 — iPhone App Planning: 2–3 hours
-- Phase 6 — Vibe Programming Readiness: 3–4 hours
+- Phase 4 — Domain Reputation Building (Optional): 2-3 weeks + 4–6 hours
+- Phase 5 — Minimal Web Client for Personal Use: 3–5 hours
+- Phase 6 — Prepare for iPhone App Wrapping: 2–3 hours
+- Phase 7 — Vibe Programming Readiness: 3–4 hours
 
-**Total Estimated Effort:** ~22–34 hours
+**Total Estimated Effort:** ~22–34 hours (excluding optional Phase 4)
 
 ---
 
