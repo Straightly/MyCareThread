@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+
+# Block commits that include likely PII/PHI in staged changes.
+# To bypass temporarily (not recommended): set env var PII_SCAN_SKIP=1 for that commit.
+
+if command -v node >/dev/null 2>&1; then
+  node scripts/pii-scan.js
+else
+  echo "PII/PHI scan: node not found; refusing to commit." >&2
+  exit 2
+fi
