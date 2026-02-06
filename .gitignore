@@ -148,6 +148,13 @@ MyRecord*/
 summary_*.json
 threads_*.json
 
+# Generated / derived exports that may contain PHI/PII
+concepts_*.json
+
+# Personal medical writeups / analyses (keep out of git)
+specialist-briefing-*.md
+docs/NARRATIVE_ANALYSIS.md
+
 # Logs and system files
 *.log
 .DS_Store

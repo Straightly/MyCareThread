@@ -33,6 +33,46 @@ This is a **personal project**: single-user, focused on reliability and data own
   - Single-user: credentials and tokens stored locally and securely.
   - No multi-user account system initially.
 
+### PHI/PII Safety — Option A (Rewrite Git History to Remove PHI/PII)
+
+**Goal:** Completely remove any committed PHI/PII from the repository, including all prior commits, then force-push a cleaned history.
+
+**Warning:** This rewrites history. Anyone else with a clone must re-clone or hard-reset to the rewritten history.
+
+**Checklist:**
+
+- [ ] **Step A.1 — Make a local backup before rewriting**
+  - [ ] Copy the entire `MyCareThread/` folder to a safe location (outside git).
+  - [ ] Confirm you have the correct remote (GitHub) and branch (`main`).
+
+- [ ] **Step A.2 — Identify PHI/PII files to remove from history**
+  - [ ] List all tracked files and flag anything containing:
+    - Names, emails, phone numbers, addresses
+    - Member IDs, MRNs, DOB
+    - Provider names/NPIs tied to personal care
+    - Any exported clinical narratives or clinical summaries
+  - [ ] Create a short “remove list” (paths) that must be purged.
+
+- [ ] **Step A.3 — Prevent re-introducing PHI/PII**
+  - [ ] Update `.gitignore` to exclude generated medical exports and personal writeups (examples: `concepts_*.json`, `summary_*.json`, `threads_*.json`, `specialist-briefing-*.md`).
+  - [ ] Move any needed personal/medical notes to a private non-repo folder.
+
+- [ ] **Step A.4 — Rewrite history to purge files**
+  - [ ] Preferred tool: `git filter-repo`.
+  - [ ] If `git filter-repo` is not installed, choose an alternative method (install filter-repo, or use BFG Repo-Cleaner).
+
+- [ ] **Step A.5 — Verify the repo is clean locally**
+  - [ ] Confirm removed files do not exist in any commit.
+  - [ ] Run content searches for known identifiers (emails, phone numbers, addresses, names).
+
+- [ ] **Step A.6 — Force-push cleaned history**
+  - [ ] Force-push `main` to the remote.
+  - [ ] Confirm GitHub no longer shows the removed files.
+
+- [ ] **Step A.7 — Post-cleanup hygiene**
+  - [ ] Rotate any credentials if you suspect they were committed.
+  - [ ] Document which files are safe to keep in-repo vs. must remain private.
+
 ---
 
 ## 3. Phases and Time Estimates
