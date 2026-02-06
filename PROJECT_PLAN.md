@@ -500,7 +500,7 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 - [ ] **Step 3.9 — Set Up Self-Hosted Email Server**
 
-**Goal:** Create a business email (developer@nothingbuttrust.com) for Aetna developer portal registration.
+**Goal:** Create a business email (<REDACTED_EMAIL>) for Aetna developer portal registration.
 
 **Platform:** Oracle Linux instance with Postfix/Dovecot.
 
@@ -510,8 +510,8 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 - [ ] Install Postfix and Dovecot: sudo dnf install postfix dovecot
 - [ ] Configure Postfix (/etc/postfix/main.cf):
     ```
-    myhostname = mail.nothingbuttrust.com
-    mydomain = nothingbuttrust.com
+    myhostname = <REDACTED_MAIL_HOST>
+    mydomain = <REDACTED_DOMAIN>
     myorigin = $mydomain
     inet_interfaces = all
     mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
@@ -532,14 +532,14 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 - [X] Open firewall ports: sudo firewall-cmd --permanent --add-port=25/tcp --add-port=143/tcp --add-port=587/tcp; sudo firewall-cmd --reload
 - [X] OCI security list ingress rules: Add inbound rules for ports 25, 143, 587 (TCP) from 0.0.0.0/0
 - [ ] DNS setup on GoDaddy:
-    - [X] MX record: Name @ (root domain), Priority 10, Value mail.nothingbuttrust.com
-    - [X] A record: Name mail.nothingbuttrust.com, Value Oracle server IP
+    - [X] MX record: Name @ (root domain), Priority 10, Value <REDACTED_MAIL_HOST>
+    - [X] A record: Name <REDACTED_MAIL_HOST>, Value Oracle server IP
     - [X] SPF: TXT "@" "v=spf1 mx ~all"
     - [ ] DKIM: Install and configure opendkim for email signing
         1. Install opendkim: sudo dnf install opendkim
         2. Create keys directory: sudo mkdir -p /etc/opendkim/keys
-        3. Generate key pair for nothingbuttrust.com:
-           sudo opendkim-genkey -s default -d nothingbuttrust.com -D /etc/opendkim/keys
+        3. Generate key pair for <REDACTED_DOMAIN>:
+           sudo opendkim-genkey -s default -d <REDACTED_DOMAIN> -D /etc/opendkim/keys
            (This creates /etc/opendkim/keys/default.private and default.txt)
         4. Set permissions:
            sudo chown -R opendkim:opendkim /etc/opendkim/keys
@@ -565,25 +565,25 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
            
            UserID                  opendkim:opendkim
            
-           Domain                  nothingbuttrust.com
+           Domain                  <REDACTED_DOMAIN>
            KeyFile                 /etc/opendkim/keys/default.private
            Selector                default
            ```
         6. Create /etc/opendkim/KeyTable with content:
            ```
-           default._domainkey.nothingbuttrust.com nothingbuttrust.com:default:/etc/opendkim/keys/default.private
+           default._domainkey.<REDACTED_DOMAIN> <REDACTED_DOMAIN>:default:/etc/opendkim/keys/default.private
            ```
         7. Create /etc/opendkim/SigningTable with content:
            ```
-           *@nothingbuttrust.com default._domainkey.nothingbuttrust.com
+           *@<REDACTED_DOMAIN> default._domainkey.<REDACTED_DOMAIN>
            ```
         8. Create /etc/opendkim/TrustedHosts with content:
            ```
            127.0.0.1
            ::1
            localhost
-           mail.nothingbuttrust.com
-           nothingbuttrust.com
+           <REDACTED_MAIL_HOST>
+           <REDACTED_DOMAIN>
            ```
         9. Configure Postfix to use opendkim by adding to /etc/postfix/main.cf:
            ```
@@ -602,24 +602,24 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
               Name: default._domainkey
               Value: "v=DKIM1; k=rsa; p=<paste public key here>"
               (Remove quotes and line breaks from the key value)
-    - [ ] DMARC: TXT "_dmarc" "v=DMARC1; p=quarantine; rua=mailto:admin@nothingbuttrust.com"
-- [ ] SSL: Install and configure Let's Encrypt certificates for mail.nothingbuttrust.com
+    - [ ] DMARC: TXT "_dmarc" "v=DMARC1; p=quarantine; rua=mailto:<REDACTED_EMAIL>"
+- [ ] SSL: Install and configure Let's Encrypt certificates for <REDACTED_MAIL_HOST>
         1. Install certbot: sudo dnf install certbot
         2. Stop services temporarily (certbot needs port 80):
            sudo systemctl stop postfix
            sudo systemctl stop dovecot
         3. Obtain certificate:
-           sudo certbot certonly --standalone -d mail.nothingbuttrust.com
-           (This creates /etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem and privkey.pem)
+           sudo certbot certonly --standalone -d <REDACTED_MAIL_HOST>
+           (This creates /etc/letsencrypt/live/<REDACTED_MAIL_HOST>/fullchain.pem and privkey.pem)
         4. Set permissions for certificates:
-           sudo chmod 644 /etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem
-           sudo chmod 600 /etc/letsencrypt/live/mail.nothingbuttrust.com/privkey.pem
-           sudo chown root:root /etc/letsencrypt/live/mail.nothingbuttrust.com/*
+           sudo chmod 644 /etc/letsencrypt/live/<REDACTED_MAIL_HOST>/fullchain.pem
+           sudo chmod 600 /etc/letsencrypt/live/<REDACTED_MAIL_HOST>/privkey.pem
+           sudo chown root:root /etc/letsencrypt/live/<REDACTED_MAIL_HOST>/*
         5. Configure Postfix for SSL by adding to /etc/postfix/main.cf:
            ```
            # SSL Configuration
-           smtpd_tls_cert_file = /etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem
-           smtpd_tls_key_file = /etc/letsencrypt/live/mail.nothingbuttrust.com/privkey.pem
+           smtpd_tls_cert_file = /etc/letsencrypt/live/<REDACTED_MAIL_HOST>/fullchain.pem
+           smtpd_tls_key_file = /etc/letsencrypt/live/<REDACTED_MAIL_HOST>/privkey.pem
            smtpd_tls_security_level = encrypt
            smtpd_tls_received_header = yes
            smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
@@ -637,8 +637,8 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
         6. Configure Dovecot for SSL by editing /etc/dovecot/conf.d/10-ssl.conf:
            ```
            ssl = required
-           ssl_cert = </etc/letsencrypt/live/mail.nothingbuttrust.com/fullchain.pem
-           ssl_key = </etc/letsencrypt/live/mail.nothingbuttrust.com/privkey.pem
+           ssl_cert = </etc/letsencrypt/live/<REDACTED_MAIL_HOST>/fullchain.pem
+           ssl_key = </etc/letsencrypt/live/<REDACTED_MAIL_HOST>/privkey.pem
            ssl_protocols = !SSLv2 !SSLv3
            ssl_cipher_list = ALL:!ADH:!LOW:!SSLv2:!SSLv3:!EXP:!aNULL:!eNULL:!NULL
            ```
@@ -646,11 +646,11 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
            sudo systemctl restart postfix
            sudo systemctl restart dovecot
         8. Test SSL:
-           - SMTP: openssl s_client -connect mail.nothingbuttrust.com:587 -starttls smtp
-           - IMAP: openssl s_client -connect mail.nothingbuttrust.com:993
+           - SMTP: openssl s_client -connect <REDACTED_MAIL_HOST>:587 -starttls smtp
+           - IMAP: openssl s_client -connect <REDACTED_MAIL_HOST>:993
 - [X] Create user: sudo useradd -m developer; sudo passwd developer
 - [ ] Verify email send/receive functionality:
-    1. Send test email from external account (Gmail, Outlook, etc.) to developer@nothingbuttrust.com
+    1. Send test email from external account (Gmail, Outlook, etc.) to <REDACTED_EMAIL>
     2. Check delivery with command line on server:
        - View mail queue: sudo mailq
        - Check logs: sudo journalctl -u postfix -f
@@ -659,13 +659,13 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
        - Install mail client: sudo dnf install mailx
        - Read mail: mail -u developer
     4. Send test email from server:
-       - echo "Test message" | mail -s "Test Subject" your_external_email@example.com
+       - echo "Test message" | mail -s "Test Subject" <REDACTED_EXTERNAL_EMAIL>
     5. Verify email client can connect and send/receive:
        - Configure Outlook/Thunderbird with settings above
        - Send test email to external account
        - Reply to test email delivery both ways
 - [ ] Test: Connect with email client (IMAP 143, SMTP 587 with TLS).
-- [ ] Use developer@nothingbuttrust.com for Aetna registration.
+- [ ] Use <REDACTED_EMAIL> for Aetna registration.
 
 - [ ] **Step 3.10 — Insurer Claim Data Collection**
 
@@ -676,7 +676,7 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 **Steps:**
 
 - [x] Register on Aetna developer portal (https://developerportal.aetna.com/) - **COMPLETED**
-  - Used developer@nothingbuttrust.com
+  - Used <REDACTED_EMAIL>
   - Registration submitted and awaiting approval
 - [ ] **Follow up on Aetna registration approval status** - **NEXT ACTION**
   - Check email for approval notification
@@ -825,7 +825,7 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
   4. Restart services: sudo systemctl restart postfix dovecot
 
 - [ ] **Step 4.2 — Complete DNS Records**
-  1. Add DMARC record: TXT "_dmarc" "v=DMARC1; p=quarantine; rua=mailto:admin@nothingbuttrust.com"
+  1. Add DMARC record: TXT "_dmarc" "v=DMARC1; p=quarantine; rua=mailto:<REDACTED_EMAIL>"
   2. Verify SPF record: TXT "@" "v=spf1 mx ~all"
   3. Consider adding DKIM if package becomes available
 
