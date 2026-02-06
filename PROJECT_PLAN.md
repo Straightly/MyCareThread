@@ -110,6 +110,8 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 **Estimate:** 7–10 hours.
 
+**Status (2026-02-05):** Phase 1 complete. Cloudflare backend deployed and working with KV storage; ingests IHE XDM export (METADATA + CDA DOCs), builds full + clinical JSON summaries, and supports topic-based thread extraction via `/threads`.
+
 ---
 
 ### Phase 2 — SMART on FHIR Flow & Epic Connection (PAUSED)
@@ -633,13 +635,20 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 **Steps:**
 
-- [ ] Register on Aetna developer portal (https://developerportal.aetna.com/).
-- [ ] Create a patient access app and obtain credentials.
+- [x] Register on Aetna developer portal (https://developerportal.aetna.com/) - **COMPLETED**
+  - Used developer@nothingbuttrust.com
+  - Registration submitted and awaiting approval
+- [ ] **Follow up on Aetna registration approval status** - **NEXT ACTION**
+  - Check email for approval notification
+  - If delayed, contact Aetna developer support
+- [ ] Create a patient access app and obtain credentials (after approval).
 - [ ] Implement SMART on FHIR OAuth flow for patient authentication.
 - [ ] Query FHIR resources: Claim (for claims), Coverage (insurance), etc.
 - [ ] Handle data ingestion into MyCareThread backend.
 
 **Notes:** APIs available for Medicare Advantage plans; confirm availability for other Meritain plans. Good developer support from Aetna.
+
+**Current Status (Feb 3, 2026):** Email server setup complete. Aetna registration submitted, awaiting approval.
 
 - [ ] **Step 3.11 — Epic Document Export Investigation (User Task)**
   
