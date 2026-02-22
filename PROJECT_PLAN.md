@@ -678,9 +678,11 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 - [x] Register on Aetna developer portal (https://developerportal.aetna.com/) - **COMPLETED**
   - Used <REDACTED_EMAIL>
   - Registration submitted and awaiting approval
-- [ ] **Follow up on Aetna registration approval status** - **NEXT ACTION**
-  - Check email for approval notification
-  - If delayed, contact Aetna developer support
+- [x] **Follow up on Aetna registration approval status** - **IN PROGRESS**
+  - ✅ Received approval email from Joel Hansen/Aetna Interoperability Production Access team
+  - ❌ Account still shows "pending for approval" in developer portal
+  - ❌ Cannot access API credentials despite approval email
+  - 📧 Contacted support for credential access (Feb 13, 2026)
 - [ ] Create a patient access app and obtain credentials (after approval).
 - [ ] Implement SMART on FHIR OAuth flow for patient authentication.
 - [ ] Query FHIR resources: Claim (for claims), Coverage (insurance), etc.
@@ -688,7 +690,7 @@ Estimates assume an experienced programmer comfortable with full-stack work and 
 
 **Notes:** APIs available for Medicare Advantage plans; confirm availability for other Meritain plans. Good developer support from Aetna.
 
-**Current Status (Feb 3, 2026):** Email server setup complete. Aetna registration submitted, awaiting approval.
+**Current Status (Feb 13, 2026):** Received Aetna API approval email but developer portal still shows account pending. Contacted support for credential access. Waiting for resolution to proceed with API integration.
 
 - [ ] **Step 3.11 — Epic Document Export Investigation (User Task)**
   
