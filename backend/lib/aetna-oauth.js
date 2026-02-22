@@ -26,10 +26,14 @@ export async function handleAetnaCallback(url, env) {
 
   const CLIENT_ID = env.AETNA_CLIENT_ID;
   const CLIENT_SECRET = env.AETNA_CLIENT_SECRET;
+  const APP_NAME = env.AETNA_APP_NAME;
   const REDIRECT_URI = `${url.origin}/aetna-callback`;
 
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    return new Response("Aetna credentials not configured", { status: 500 });
+  if (!CLIENT_ID || !CLIENT_SECRET || !APP_NAME) {
+    return new Response("Aetna credentials not configured. Missing: " + 
+      (!CLIENT_ID ? "CLIENT_ID " : "") + 
+      (!CLIENT_SECRET ? "CLIENT_SECRET " : "") + 
+      (!APP_NAME ? "APP_NAME" : ""), { status: 500 });
   }
 
   try {
@@ -65,6 +69,7 @@ export async function handleAetnaCallback(url, env) {
       expiresAt: Date.now() + (tokenData.expires_in * 1000),
       tokenType: tokenData.token_type,
       scope: tokenData.scope,
+      appName: APP_NAME,
       acquiredAt: new Date().toISOString()
     }));
 
@@ -204,9 +209,16 @@ export async function checkAetnaAuthStatus(env) {
  */
 export async function initiateAetnaAuth(url, env) {
   const CLIENT_ID = env.AETNA_CLIENT_ID;
+  const APP_NAME = env.AETNA_APP_NAME;
   const REDIRECT_URI = `${url.origin}/aetna-callback`;
   const SCOPE = "patient/Patient.read patient/MedicationRequest.read patient/Condition.read patient/ExplanationOfBenefit.read patient/Coverage.read patient/DocumentReference.read";
   const STATE = crypto.randomUUID();
+
+  if (!CLIENT_ID || !APP_NAME) {
+    return new Response("Aetna credentials not configured. Missing: " + 
+      (!CLIENT_ID ? "CLIENT_ID " : "") + 
+      (!APP_NAME ? "APP_NAME" : ""), { status: 500 });
+  }
 
   // Store state for callback validation
   await env.MYCARETHREAD_KV.put(`aetna:state:${STATE}`, JSON.stringify({ 
