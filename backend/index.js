@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import { extractConcepts } from "./lib/conceptExtractor.js";
-import { handleAetnaCallback, fetchAetnaData, checkAetnaAuthStatus, initiateAetnaAuth } from "./lib/aetna-oauth.js";
+import { fetchAetnaData, checkAetnaAuthStatus, getAetnaClientCredentialsToken } from "./lib/aetna-oauth.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -379,11 +379,6 @@ export default {
 
     // --- Aetna Patient Access API Endpoints ---
 
-    // Aetna OAuth Callback Endpoint
-    if (request.method === "GET" && url.pathname === "/aetna-callback") {
-      return await handleAetnaCallback(url, env);
-    }
-
     // Aetna Patient Data Fetch Endpoint
     if (request.method === "GET" && url.pathname === "/aetna-data") {
       return await fetchAetnaData(url, env);
@@ -394,9 +389,9 @@ export default {
       return await checkAetnaAuthStatus(env);
     }
 
-    // Aetna OAuth Initiation (Optional - for standalone launch)
-    if (request.method === "GET" && url.pathname === "/aetna-auth") {
-      return await initiateAetnaAuth(url, env);
+    // Aetna Client Credentials Token (Backend-to-Backend)
+    if (request.method === "POST" && url.pathname === "/aetna-auth") {
+      return await getAetnaClientCredentialsToken(env);
     }
 
     // --- SMART on FHIR Endpoints ---

@@ -1,92 +1,5 @@
 // Aetna Patient Access API OAuth Handler
 
-/**
- * Handle Aetna OAuth callback - exchange authorization code for access token
- * @param {URL} url - Request URL containing code and state parameters
- * @param {Object} env - Cloudflare Workers environment (KV, secrets)
- * @returns {Promise<Response>} - Response with token data or error
- */
-export async function handleAetnaCallback(url, env) {
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  const error = url.searchParams.get("error");
-  
-  if (error) {
-    return new Response(`Aetna auth error: ${error}`, { status: 400 });
-  }
-  if (!code || !state) {
-    return new Response("Missing code or state parameter", { status: 400 });
-  }
-
-  // Retrieve context using state (if you stored it)
-  const stateDataStr = await env.MYCARETHREAD_KV.get(`aetna:state:${state}`);
-  if (stateDataStr) {
-    await env.MYCARETHREAD_KV.delete(`aetna:state:${state}`);
-  }
-
-  const CLIENT_ID = env.AETNA_CLIENT_ID;
-  const CLIENT_SECRET = env.AETNA_CLIENT_SECRET;
-  const APP_NAME = env.AETNA_APP_NAME;
-  const REDIRECT_URI = `${url.origin}/aetna-callback`;
-
-  if (!CLIENT_ID || !CLIENT_SECRET || !APP_NAME) {
-    return new Response("Aetna credentials not configured. Missing: " + 
-      (!CLIENT_ID ? "CLIENT_ID " : "") + 
-      (!CLIENT_SECRET ? "CLIENT_SECRET " : "") + 
-      (!APP_NAME ? "APP_NAME" : ""), { status: 500 });
-  }
-
-  try {
-    // Exchange authorization code for access token
-    const tokenEndpoint = "https://api.aetna.com/oauth2/token/v2";
-    
-    const params = new URLSearchParams();
-    params.set("grant_type", "authorization_code");
-    params.set("code", code);
-    params.set("redirect_uri", REDIRECT_URI);
-    params.set("client_id", CLIENT_ID);
-    params.set("client_secret", CLIENT_SECRET);
-
-    const tokenResp = await fetch(tokenEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json"
-      },
-      body: params
-    });
-
-    const tokenData = await tokenResp.json();
-
-    if (!tokenResp.ok) {
-      return new Response(`Aetna token exchange failed: ${JSON.stringify(tokenData)}`, { status: 500 });
-    }
-
-    // Store Aetna tokens securely
-    await env.MYCARETHREAD_KV.put("aetna:auth:current", JSON.stringify({
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token,
-      expiresAt: Date.now() + (tokenData.expires_in * 1000),
-      tokenType: tokenData.token_type,
-      scope: tokenData.scope,
-      appName: APP_NAME,
-      acquiredAt: new Date().toISOString()
-    }));
-
-    return new Response(JSON.stringify({ 
-      status: "success", 
-      message: "Aetna token acquired and stored. You can now fetch patient data.",
-      expiresIn: tokenData.expires_in,
-      scope: tokenData.scope
-    }), { 
-      status: 200, 
-      headers: { "content-type": "application/json; charset=UTF-8" } 
-    });
-
-  } catch (e) {
-    return new Response(`Aetna token exchange error: ${e.message}`, { status: 500 });
-  }
-}
 
 /**
  * Fetch patient data from Aetna API
@@ -102,18 +15,16 @@ export async function fetchAetnaData(url, env) {
     return new Response("Missing resource parameter (e.g., ?resource=MedicationRequest)", { status: 400 });
   }
 
-  // Get stored Aetna token
-  const authDataStr = await env.MYCARETHREAD_KV.get("aetna:auth:current");
-  if (!authDataStr) {
-    return new Response("No Aetna authentication found. Please complete OAuth flow first.", { status: 401 });
+  // Check authentication status and ensure we have a valid token
+  const authStatusResponse = await checkAetnaAuthStatus(env);
+  const authStatus = await authStatusResponse.json();
+  
+  if (!authStatus.authenticated) {
+    return new Response("Failed to authenticate with Aetna", { status: 401 });
   }
 
-  const authData = JSON.parse(authDataStr);
-  
-  // Check if token expired
-  if (Date.now() > authData.expiresAt) {
-    return new Response("Aetna token expired. Please re-authenticate.", { status: 401 });
-  }
+  // Use the token from the cache (checkAetnaAuthStatus ensures it's valid)
+  const token = tokenCache.accessToken;
 
   try {
     const baseUrl = "https://api.aetna.com/v2/patientaccess";
@@ -167,34 +78,168 @@ export async function fetchAetnaData(url, env) {
   }
 }
 
+// In-memory token cache (per worker instance)
+let tokenCache = null;
+
 /**
- * Check Aetna authentication status
+ * Check Aetna authentication status and auto-renew if needed
  * @param {Object} env - Cloudflare Workers environment
- * @returns {Promise<Response>} - Response with auth status
+ * @returns {Promise<Response>} - Response with auth status and renewal attempts
  */
 export async function checkAetnaAuthStatus(env) {
-  const authDataStr = await env.MYCARETHREAD_KV.get("aetna:auth:current");
+  const now = Date.now();
   
-  if (!authDataStr) {
-    return new Response(JSON.stringify({ 
-      authenticated: false,
-      message: "No Aetna authentication found"
-    }), {
-      status: 200,
-      headers: { "content-type": "application/json; charset=UTF-8" }
-    });
+  // Case 1: No token in memory - try to get new one
+  if (!tokenCache) {
+    try {
+      const tokenResponse = await getAetnaClientCredentialsToken(env);
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json();
+        tokenCache = {
+          accessToken: tokenData.access_token,
+          expiresAt: now + (tokenData.expires_in * 1000),
+          tokenType: tokenData.token_type,
+          scope: tokenData.scope,
+          acquiredAt: new Date().toISOString()
+        };
+        return new Response(JSON.stringify({ 
+          authenticated: true,
+          message: "Token retrieved successfully",
+          action: "new_token_acquired",
+          expiresAt: tokenCache.expiresAt,
+          expiresIn: tokenCache.expiresIn
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      } else {
+        return new Response(JSON.stringify({ 
+          authenticated: false,
+          message: "Failed to retrieve new token"
+        }), {
+          status: 401,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ 
+        authenticated: false,
+        message: "Error retrieving new token: " + e.message
+      }), {
+        status: 500,
+        headers: { "content-type": "application/json; charset=UTF-8" }
+      });
+    }
   }
 
-  const authData = JSON.parse(authDataStr);
-  const isExpired = Date.now() > authData.expiresAt;
+  // Case 2: Token exists - check if valid or about to expire
+  const timeToExpiry = tokenCache.expiresAt - now;
+  const oneMinute = 60 * 1000;
   
+  // Token expired - get new one (same logic as no token)
+  if (timeToExpiry <= 0) {
+    try {
+      const tokenResponse = await getAetnaClientCredentialsToken(env);
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json();
+        tokenCache = {
+          accessToken: tokenData.access_token,
+          expiresAt: now + (tokenData.expires_in * 1000),
+          tokenType: tokenData.token_type,
+          scope: tokenData.scope,
+          acquiredAt: new Date().toISOString()
+        };
+        return new Response(JSON.stringify({ 
+          authenticated: true,
+          message: "Token retrieved successfully",
+          action: "new_token_acquired"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      } else {
+        return new Response(JSON.stringify({ 
+          authenticated: false,
+          message: "Failed to retrieve new token"
+        }), {
+          status: 401,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ 
+        authenticated: false,
+        message: "Error retrieving new token: " + e.message
+      }), {
+        status: 500,
+        headers: { "content-type": "application/json; charset=UTF-8" }
+      });
+    }
+  }
+  
+  // Token about to expire (within 1 minute) - proactively refresh
+  if (timeToExpiry <= oneMinute) {
+    try {
+      const tokenResponse = await getAetnaClientCredentialsToken(env);
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json();
+        tokenCache = {
+          accessToken: tokenData.access_token,
+          expiresAt: now + (tokenData.expires_in * 1000),
+          tokenType: tokenData.token_type,
+          scope: tokenData.scope,
+          acquiredAt: new Date().toISOString()
+        };
+        return new Response(JSON.stringify({ 
+          authenticated: true,
+          message: "Token renewed before expiry",
+          action: "token_proactively_renewed"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      } else {
+        // Failed to renew, but current token still valid for now
+        return new Response(JSON.stringify({
+          authenticated: true,
+          message: "Token is current and valid (renewal failed)",
+          expiresAt: tokenCache.expiresAt,
+          expiresIn: timeToExpiry,
+          scope: tokenCache.scope,
+          tokenType: tokenCache.tokenType,
+          acquiredAt: tokenCache.acquiredAt,
+          warning: "Renewal attempted but failed"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=UTF-8" }
+        });
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({
+        authenticated: true,
+        message: "Token is current and valid (renewal error)",
+        expiresAt: tokenCache.expiresAt,
+        expiresIn: timeToExpiry,
+        scope: tokenCache.scope,
+        tokenType: tokenCache.tokenType,
+        acquiredAt: tokenCache.acquiredAt,
+        warning: "Renewal error: " + e.message
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json; charset=UTF-8" }
+      });
+    }
+  }
+  
+  // Token is valid and not about to expire
   return new Response(JSON.stringify({
-    authenticated: !isExpired,
-    expiresAt: authData.expiresAt,
-    expiresIn: Math.max(0, authData.expiresAt - Date.now()),
-    scope: authData.scope,
-    tokenType: authData.tokenType,
-    acquiredAt: authData.acquiredAt
+    authenticated: true,
+    message: "Token is current and valid",
+    expiresAt: tokenCache.expiresAt,
+    expiresIn: timeToExpiry,
+    scope: tokenCache.scope,
+    tokenType: tokenCache.tokenType,
+    acquiredAt: tokenCache.acquiredAt
   }), {
     status: 200,
     headers: { "content-type": "application/json; charset=UTF-8" }
@@ -202,35 +247,62 @@ export async function checkAetnaAuthStatus(env) {
 }
 
 /**
- * Initiate Aetna OAuth flow (if needed for standalone launch)
- * @param {URL} url - Request URL
+ * Get Aetna access token using Client Credentials Flow
  * @param {Object} env - Cloudflare Workers environment
- * @returns {Promise<Response>} - Redirect to Aetna authorization
+ * @returns {Promise<Response>} - Response with token data or error
  */
-export async function initiateAetnaAuth(url, env) {
+export async function getAetnaClientCredentialsToken(env) {
   const CLIENT_ID = env.AETNA_CLIENT_ID;
+  const CLIENT_SECRET = env.AETNA_CLIENT_SECRET;
   const APP_NAME = env.AETNA_APP_NAME;
-  const REDIRECT_URI = `${url.origin}/aetna-callback`;
-  const SCOPE = "patient/Patient.read patient/MedicationRequest.read patient/Condition.read patient/ExplanationOfBenefit.read patient/Coverage.read patient/DocumentReference.read";
-  const STATE = crypto.randomUUID();
 
-  if (!CLIENT_ID || !APP_NAME) {
+  if (!CLIENT_ID || !CLIENT_SECRET || !APP_NAME) {
     return new Response("Aetna credentials not configured. Missing: " + 
       (!CLIENT_ID ? "CLIENT_ID " : "") + 
+      (!CLIENT_SECRET ? "CLIENT_SECRET " : "") + 
       (!APP_NAME ? "APP_NAME" : ""), { status: 500 });
   }
 
-  // Store state for callback validation
-  await env.MYCARETHREAD_KV.put(`aetna:state:${STATE}`, JSON.stringify({ 
-    initiatedAt: new Date().toISOString() 
-  }), { expirationTtl: 300 });
+  try {
+    // Get access token using client credentials flow
+    const tokenEndpoint = "https://api.aetna.com/oauth2/token/v2";
+    
+    const params = new URLSearchParams();
+    params.set("grant_type", "client_credentials");
+    params.set("client_id", CLIENT_ID);
+    params.set("client_secret", CLIENT_SECRET);
+    params.set("scope", "patient/Patient.read patient/MedicationRequest.read patient/Condition.read patient/ExplanationOfBenefit.read patient/Coverage.read patient/DocumentReference.read");
 
-  const authUrl = new URL("https://api.aetna.com/oauth2/auth/v2");
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", CLIENT_ID);
-  authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
-  authUrl.searchParams.set("scope", SCOPE);
-  authUrl.searchParams.set("state", STATE);
+    const tokenResp = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      body: params
+    });
 
-  return Response.redirect(authUrl.toString(), 302);
+    const tokenData = await tokenResp.json();
+
+    if (!tokenResp.ok) {
+      return new Response(`Aetna token exchange failed: ${JSON.stringify(tokenData)}`, { status: 500 });
+    }
+
+    // Return token data (caller will handle caching)
+    return new Response(JSON.stringify({ 
+      status: "success", 
+      message: "Aetna client credentials token acquired.",
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token || null,
+      expiresIn: tokenData.expires_in,
+      scope: tokenData.scope,
+      tokenType: tokenData.token_type
+    }), { 
+      status: 200, 
+      headers: { "content-type": "application/json; charset=UTF-8" } 
+    });
+
+  } catch (e) {
+    return new Response(`Aetna client credentials token error: ${e.message}`, { status: 500 });
+  }
 }
