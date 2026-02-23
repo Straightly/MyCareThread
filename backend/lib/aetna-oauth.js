@@ -96,9 +96,9 @@ export async function checkAetnaAuthStatus(env) {
       if (tokenResponse.ok) {
         const tokenData = await tokenResponse.json();
         tokenCache = {
-          accessToken: tokenData.access_token,
-          expiresAt: now + (tokenData.expires_in * 1000),
-          tokenType: tokenData.token_type,
+          accessToken: tokenData.accessToken,
+          expiresAt: now + (tokenData.expiresIn * 1000),
+          tokenType: tokenData.tokenType,
           scope: tokenData.scope,
           acquiredAt: new Date().toISOString()
         };
@@ -113,9 +113,29 @@ export async function checkAetnaAuthStatus(env) {
           headers: { "content-type": "application/json; charset=UTF-8" }
         });
       } else {
+        // Return detailed error information for Aetna support
+        const errorData = await tokenResponse.json();
         return new Response(JSON.stringify({ 
           authenticated: false,
-          message: "Failed to retrieve new token"
+          message: "Failed to retrieve new token",
+          debug: {
+            request: {
+              endpoint: "https://api.aetna.com/oauth2/token/v2",
+              method: "POST",
+              headers: {
+                "Authorization": "Basic [REDACTED_CREDENTIALS]",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json"
+              },
+              body: "grant_type=client_credentials"
+            },
+            response: {
+              status: tokenResponse.status,
+              statusText: tokenResponse.statusText,
+              body: errorData
+            },
+            timestamp: new Date().toISOString()
+          }
         }), {
           status: 401,
           headers: { "content-type": "application/json; charset=UTF-8" }
@@ -124,7 +144,11 @@ export async function checkAetnaAuthStatus(env) {
     } catch (e) {
       return new Response(JSON.stringify({ 
         authenticated: false,
-        message: "Error retrieving new token: " + e.message
+        message: "Error retrieving new token: " + e.message,
+        debug: {
+          error: e.message,
+          timestamp: new Date().toISOString()
+        }
       }), {
         status: 500,
         headers: { "content-type": "application/json; charset=UTF-8" }
@@ -257,35 +281,107 @@ export async function getAetnaClientCredentialsToken(env) {
   const APP_NAME = env.AETNA_APP_NAME;
 
   if (!CLIENT_ID || !CLIENT_SECRET || !APP_NAME) {
-    return new Response("Aetna credentials not configured. Missing: " + 
-      (!CLIENT_ID ? "CLIENT_ID " : "") + 
-      (!CLIENT_SECRET ? "CLIENT_SECRET " : "") + 
-      (!APP_NAME ? "APP_NAME" : ""), { status: 500 });
+    return new Response(JSON.stringify({
+      status: "error",
+      message: "Aetna credentials not configured. Missing: " + 
+        (!CLIENT_ID ? "CLIENT_ID " : "") + 
+        (!CLIENT_SECRET ? "CLIENT_SECRET " : "") + 
+        (!APP_NAME ? "APP_NAME" : "")
+    }), { status: 500 });
   }
 
   try {
     // Get access token using client credentials flow
-    const tokenEndpoint = "https://api.aetna.com/oauth2/token/v2";
+    const tokenEndpoint = "https://apif1.aetna.com/fhir/v1/fhirserver_auth/oauth2/token";
     
+    // Try Basic Auth approach without scope first
     const params = new URLSearchParams();
     params.set("grant_type", "client_credentials");
-    params.set("client_id", CLIENT_ID);
-    params.set("client_secret", CLIENT_SECRET);
-    params.set("scope", "patient/Patient.read patient/MedicationRequest.read patient/Condition.read patient/ExplanationOfBenefit.read patient/Coverage.read patient/DocumentReference.read");
+    params.set("application_name", APP_NAME); // Add app name
+    // Try without scope - some APIs don't require it for client credentials
+    // params.set("scope", "patient/Patient.read patient/MedicationRequest.read patient/Condition.read patient/ExplanationOfBenefit.read patient/Coverage.read patient/DocumentReference.read");
+
+    const basicAuth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+    // For debugging, create a properly redacted version
+    const redactedBasicAuth = "Basic [REDACTED_CREDENTIALS]"; // Don't even encode the redacted version
+
+    console.log("Attempting token exchange with Basic Auth:", {
+      endpoint: tokenEndpoint,
+      grant_type: "client_credentials",
+      client_id: CLIENT_ID.substring(0, 8) + "...",
+      client_secret_length: CLIENT_SECRET.length,
+      scope: "patient/Patient.read patient/MedicationRequest.read..."
+    });
+
+    console.log("Request body:", params.toString());
 
     const tokenResp = await fetch(tokenEndpoint, {
       method: "POST",
       headers: {
+        "Authorization": `Basic ${basicAuth}`,
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json"
       },
       body: params
     });
 
-    const tokenData = await tokenResp.json();
+    const responseText = await tokenResp.text();
+    console.log("Token response status:", tokenResp.status);
+    console.log("Token response body:", responseText);
+
+    let tokenData;
+    try {
+      tokenData = JSON.parse(responseText);
+    } catch (e) {
+      // Return detailed error info for debugging
+      return new Response(JSON.stringify({
+        status: "error",
+        message: "Invalid JSON response from Aetna",
+        debug: {
+          request: {
+            endpoint: tokenEndpoint,
+            method: "POST",
+            headers: {
+              "Authorization": `Basic ${redactedBasicAuth}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Accept": "application/json"
+            },
+            body: params.toString()
+          },
+          response: {
+            status: tokenResp.status,
+            statusText: tokenResp.statusText,
+            body: responseText
+          },
+          timestamp: new Date().toISOString()
+        }
+      }), { status: 500 });
+    }
 
     if (!tokenResp.ok) {
-      return new Response(`Aetna token exchange failed: ${JSON.stringify(tokenData)}`, { status: 500 });
+      // Return detailed error info for Aetna support
+      return new Response(JSON.stringify({
+        status: "error",
+        message: "Aetna token exchange failed",
+        debug: {
+          request: {
+            endpoint: tokenEndpoint,
+            method: "POST",
+            headers: {
+              "Authorization": `Basic ${redactedBasicAuth}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Accept": "application/json"
+            },
+            body: params.toString()
+          },
+          response: {
+            status: tokenResp.status,
+            statusText: tokenResp.statusText,
+            body: tokenData
+          },
+          timestamp: new Date().toISOString()
+        }
+      }), { status: 500 });
     }
 
     // Return token data (caller will handle caching)
@@ -303,6 +399,10 @@ export async function getAetnaClientCredentialsToken(env) {
     });
 
   } catch (e) {
-    return new Response(`Aetna client credentials token error: ${e.message}`, { status: 500 });
+    console.log("Token exchange error:", e.message);
+    return new Response(JSON.stringify({
+      status: "error",
+      message: "Aetna client credentials token error: " + e.message
+    }), { status: 500 });
   }
 }

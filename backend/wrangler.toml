@@ -4,6 +4,7 @@ compatibility_date = "2025-12-08"
 
 [vars]
 # Add non-secret configuration here as needed.
+AETNA_APP_NAME = "MyCareThread"
 
 # TODO (Step 1.2): After creating a KV namespace named `MYCARETHREAD_KV`
 # in the Cloudflare dashboard or via `wrangler kv:namespace create`,
